@@ -1,0 +1,56 @@
+---
+title: 'Exploring the Titanic Dataset :: Traditional approaches with new tools'
+author: "James Solomon-Rounce"
+date: ' 25th August 2016'
+output:
+  html_document:
+    fig_height: 6
+    fig_width: 8
+    highlight: tango
+    number_sections: yes
+    theme: readable
+    toc: yes
+---
+
+# Introduction
+
+This is my first attempt at a Kaggle kernel, Kaggle seems like a great site so wanted to make a foray.  Coming from a social science background my approach may seem a little 'old school' but shows how I would approach the modelling process, mixed in with some newer machine learning (aka predictive analytics) approaches.  Feedback welcome, thanks for taking the time to read.  
+
+There are N parts to my script as follows:
+
+* Exploratory Data Analysis aka EDA
+* Feature engineering for prediction
+* Where is my data or what to do with missing values
+* Stick or caret - Predictions using multiple models 
+
+## Load and check data
+
+```{r, message = FALSE}
+# Load packages
+library('ggplot2') # visualization
+library('dplyr')   # data manipulation
+library('Amelia') # missing values
+```
+
+First lets combine the test and train datasets then get a feel for what data there is to work with.
+
+```{r, message=FALSE, warning=FALSE}
+train <- read.csv('Data/1.Raw/train.csv', stringsAsFactors = F)
+test  <- read.csv('Data/1.Raw/test.csv', stringsAsFactors = F)
+
+full  <- bind_rows(train, test) # bind training & test data
+
+# check data
+str(full)
+```
+
+We've got a sense of our variables, their class type, and the first few observations of each. We know we're working with 1309 observations of 12 variables. Our first step is to get a feel for that data using EDA.
+
+# Exploratory Data Analysis aka EDA
+## What's in the data?
+
+```{r}
+head(full)
+missmap(full, col = c("grey","blue")) #first colour is missing, second is observed
+```
+
