@@ -10,6 +10,8 @@ output:
     number_sections: yes
     theme: readable
     toc: yes
+  pdf_document:
+    toc: yes
 ---
 
 # Introduction
@@ -30,6 +32,7 @@ There are N parts to my script as follows:
 library('ggplot2') # visualization
 library('dplyr')   # data manipulation
 library('Amelia') # missing values
+library('gridExtra') # for nicely formatted tables
 ```
 
 First lets combine the test and train datasets then get a feel for what data there is to work with.
@@ -49,8 +52,18 @@ We've got a sense of our variables, their class type, and the first few observat
 # Exploratory Data Analysis aka EDA
 ## What's in the data?
 
+First, it is useful to know what is missing.  The Amelia package in R can not only help visualise what is in the data, but can also help fill in some of the blanks, more on that later.  The missmap function will create a 'map' of variable as columns and observations as rows, ordering the variables by the number of missing values.
+
 ```{r}
 head(full)
 missmap(full, col = c("grey","blue")) #first colour is missing, second is observed
+```
+
+As the test and train datasets have been combined together, the first variable with the highest degree of 'missingness' is Survived, since this relates to the test data.  The variable with the second highest degree of missing values is age, with quite a lot of missing values across both the test and train datasets. We can also explicitly count the number of NAs in a particular variable.
+
+```{r}
+na_count <-sapply(full, function(y) sum(is.na(y)))
+na_count <- data.frame(na_count)
+grid.table(na_count)
 ```
 
