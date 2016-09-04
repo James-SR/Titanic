@@ -44,15 +44,28 @@ test  <- read.csv('Data/1.Raw/test.csv', stringsAsFactors = F)
 full  <- bind_rows(train, test) # bind training & test data
 
 # check data
-str(full)
+summary(full)
 ```
+
+Here we can see that the summary makes sense for some variables - Age is a continous variable ranging from an infant (0.17 years) up to a possible grandfather (80 years), with 263 missing values (NAs). For other variables, such as the passenger's sex, whether they survived and their port of embarkation it would make more sense for these variables - currently a mix of numeric and charecter variables - to be groups of individuals, which in R are called factors aka categorical variables.  Classifying these variables correctly as factors will mean that any functions, plots or models will behave themselves correctly and produce the expected results.
+
+```{r}
+full$Survived <- factor(full$Survived, levels=c(1,0))
+levels(full$Survived) <- c("Survived", "Died")
+
+# re-check data
+summary(full)
+```
+
+
+<<Discuss family make up>>
 
 We've got a sense of our variables, their class type, and the first few observations of each. We know we're working with 1309 observations of 12 variables. Our first step is to get a feel for that data using EDA.
 
 # Exploratory Data Analysis aka EDA
 ## What's in the data?
 
-First, it is useful to know what is missing.  The Amelia package in R can not only help visualise what is in the data, but can also help fill in some of the blanks, more on that later.  The missmap function will create a 'map' of variable as columns and observations as rows, ordering the variables by the number of missing values.
+First, it is useful to know what is missing, we have already seen that for age there are 263 missing values but what about the other variables?  The Amelia package in R can not only help visualise what is in the data, but can also help fill in some of the blanks, more on that later.  The missmap function will create a 'map' of variable as columns and observations as rows, ordering the variables by the number of missing values.
 
 ```{r}
 head(full)
@@ -65,5 +78,9 @@ As the test and train datasets have been combined together, the first variable w
 na_count <-sapply(full, function(y) sum(is.na(y)))
 na_count <- data.frame(na_count)
 grid.table(na_count)
+```
+
+```{r}
+ggplot(aes(y = Age, x = Sex, fill = Survived), data = train) + geom_boxplot() # needs checking
 ```
 

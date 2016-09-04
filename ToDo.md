@@ -1,4 +1,6 @@
-Box plots of continous variubles
+Factorise all relevant variables
+Explore family make up and colour by survival
+Box plots of continous variables by survived
 EDA
 
 DONE
