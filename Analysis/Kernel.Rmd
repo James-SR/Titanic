@@ -69,18 +69,30 @@ First, it is useful to know what is missing, we have already seen that for age t
 
 ```{r}
 head(full)
-missmap(full, col = c("grey","blue")) #first colour is missing, second is observed
+missmap(full, col = c("grey","navy")) #first colour is missing, second is observed
 ```
 
 As the test and train datasets have been combined together, the first variable with the highest degree of 'missingness' is Survived, since this relates to the test data.  The variable with the second highest degree of missing values is age, with quite a lot of missing values across both the test and train datasets. We can also explicitly count the number of NAs in a particular variable.
 
 ```{r}
-na_count <-sapply(full, function(y) sum(is.na(y)))
-na_count <- data.frame(na_count)
-grid.table(na_count)
+NA_Count <- sapply(full, function(y) sum(is.na(y)))
+NA_Count <- data.frame(NA_Count)
+grid.table(NA_Count)
 ```
 
+As expected, Age does have the highest number of missing values (263), with only Fare having one other missing value.
+
+Next we can begin to look at the variables in more detail.  First, let's see what the age distribution of survivors looks like, by Sex.
+
 ```{r}
-ggplot(aes(y = Age, x = Sex, fill = Survived), data = train) + geom_boxplot() # needs checking
+ggplot(aes(y = Age, x = Sex, fill = Survived), data = full[1:891,]) + geom_boxplot() # we exclude the test data
+```
+
+Interestingly the average age of males who died is older than those who survived, whereas the situation is reversed for females, with the average age of females who died being younger than those who survived.
+
+```{r}
+sex_x_survived <-table(full[1:891,]$Sex, full[1:891,]$Survived)
+grid.table(sex_x_survived)
+chisq.test(sex_x_survived)
 ```
 
