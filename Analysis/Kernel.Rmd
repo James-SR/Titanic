@@ -96,3 +96,14 @@ grid.table(sex_x_survived)
 chisq.test(sex_x_survived)
 ```
 
+```{r}
+hist(full$Age)
+```
+
+```{r}
+full$Agebin <- cut(full$Age, seq(0,80,10), right=FALSE, labels=c(1:8)) # cuts age from 0 to 80 in groups/age bands of 10
+Agebin_Freq <- cbind( Freq=table(full$Agebin), Cumul=cumsum(table(full$Agebin)), Proportion=prop.table(table(full$Agebin)))
+Agebin_Freq %>% mutate(vnum1 = round(Proportion, 1))
+grid.table(Agebin_Freq)
+```
+
