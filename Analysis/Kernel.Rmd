@@ -29,10 +29,10 @@ There are N parts to my script as follows:
 
 ```{r, message = FALSE}
 # Load packages
-library('ggplot2') # visualization
-library('dplyr')   # data manipulation
-library('Amelia') # missing values
-library('gridExtra') # for nicely formatted tables
+library('ggplot2')                                          # visualization
+library('dplyr')                                            # data manipulation
+library('Amelia')                                           # missing values
+library('gridExtra')                                        # for nicely formatted tables
 ```
 
 First lets combine the test and train datasets then get a feel for what data there is to work with.
@@ -41,10 +41,9 @@ First lets combine the test and train datasets then get a feel for what data the
 train <- read.csv('Data/1.Raw/train.csv', stringsAsFactors = F)
 test  <- read.csv('Data/1.Raw/test.csv', stringsAsFactors = F)
 
-full  <- bind_rows(train, test) # bind training & test data
+full  <- bind_rows(train, test)                             # bind training & test data
 
-# check data
-summary(full)
+summary(full)                                               # check data
 ```
 
 Here we can see that the summary makes sense for some variables - Age is a continous variable ranging from an infant (0.17 years) up to a possible grandfather (80 years), with 263 missing values (NAs). For other variables, such as the passenger's sex, whether they survived and their port of embarkation it would make more sense for these variables - currently a mix of numeric and charecter variables - to be groups of individuals, which in R are called factors aka categorical variables.  Classifying these variables correctly as factors will mean that any functions, plots or models will behave themselves correctly and produce the expected results.
@@ -52,9 +51,7 @@ Here we can see that the summary makes sense for some variables - Age is a conti
 ```{r}
 full$Survived <- factor(full$Survived, levels=c(1,0))
 levels(full$Survived) <- c("Survived", "Died")
-
-# re-check data
-summary(full)
+summary(full)                                              # re-check data
 ```
 
 
@@ -69,15 +66,15 @@ First, it is useful to know what is missing, we have already seen that for age t
 
 ```{r}
 head(full)
-missmap(full, col = c("grey","navy")) #first colour is missing, second is observed
+missmap(full, col = c("grey","navy"))                     # first colour is missing, second is observed
 ```
 
 As the test and train datasets have been combined together, the first variable with the highest degree of 'missingness' is Survived, since this relates to the test data.  The variable with the second highest degree of missing values is age, with quite a lot of missing values across both the test and train datasets. We can also explicitly count the number of NAs in a particular variable.
 
 ```{r}
 NA_Count <- sapply(full, function(y) sum(is.na(y)))
-NA_Count <- data.frame(NA_Count)
-grid.table(NA_Count)
+NA_Count <- data.frame(NA_Count)                          # convert to a data frame
+grid.table(NA_Count)                                      # produce the output table
 ```
 
 As expected, Age does have the highest number of missing values (263), with only Fare having one other missing value.
@@ -101,9 +98,12 @@ hist(full$Age)
 ```
 
 ```{r}
-full$Agebin <- cut(full$Age, seq(0,80,10), right=FALSE, labels=c(1:8)) # cuts age from 0 to 80 in groups/age bands of 10
+full$Agebin <- cut(full$Age, seq(0,90,10), right=FALSE, 
+                   labels=c("Under 10", "10-19", "20-29", "30-39", "40-49", "50-59", "60-69", "70-79", "80-89")) 
+                    # cuts age from 0 to 90 in groups/age bands of 10.  Could be made inclusive i.e. up to ten by using right=TRUE
 Agebin_Freq <- cbind( Freq=table(full$Agebin), Cumul=cumsum(table(full$Agebin)), Proportion=prop.table(table(full$Agebin)))
-Agebin_Freq %>% mutate(vnum1 = round(Proportion, 1))
-grid.table(Agebin_Freq)
+Agebin_Freq <- transform(Agebin_Freq) # convert to a data frame, could also be achieved by Agebin_Freq <- data.frame(Agebin_Freq)
+Agebin_Freq$Proportion <- paste(round(Agebin_Freq$Proportion * 100, digits=1),"%",sep="") # Decimal to a percent and round to 1 d.p.
+grid.table(Agebin_Freq)                                   # produce the output table
 ```
 
