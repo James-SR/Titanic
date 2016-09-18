@@ -122,4 +122,43 @@ Agebin_Freq <- cbind( Freq=table(full$Agebincmb), Cumul=cumsum(table(full$Agebin
 Agebin_Freq <- transform(Agebin_Freq) 
 Agebin_Freq$Proportion <- paste(round(Agebin_Freq$Proportion * 100, digits=1),"%",sep="") 
 grid.table(Agebin_Freq) 
+qplot(factor(Agebincmb), data=full[1:891,], geom="bar", fill=factor(Survived)) +
+      geom_text(aes(label = Agebin_Freq$Proportion), size = 3, hjust = 0.5, vjust = 3, position =     "stack")
+#Need to count the number of survived and died for each age group for creation of stacked bar above
+#http://stackoverflow.com/questions/6644997/showing-data-values-on-stacked-bar-chart-in-ggplot2
+#http://docs.ggplot2.org/current/geom_text.html
 ```
+
+#works to create histogram and density plot, but need to add normal curve as a secondary density plot
+ggplot (data=full[1:891,], aes(x=Age)) +
+geom_histogram(aes(y=..density..)) +
+geom_density(alpha=.2, fill= "red") 
+
+
+
+
+
+#http://stackoverflow.com/questions/6967664/ggplot2-histogram-with-normal-curve
+#works to create two density plots, one with a random normal 1000 samples one with...?
+z <- rnorm(1000)
+
+qplot(z, geom = "blank") + 
+
+geom_histogram(aes(y = ..density..)) + 
+
+stat_density(geom = "line", aes(colour = "bla")) + 
+
+stat_function(fun=dnorm, aes(x = z, colour = "blabla")) + 
+
+scale_colour_manual(name = "", values = c("red", "green"), 
+                               breaks = c("bla", "blabla"), 
+                               labels = c("kernel_est", "norm_curv")) 
+
+#http://r.789695.n4.nabble.com/Howto-fit-normal-curve-into-histogram-using-GGPLOT2-td898609.html#
+ggplot(mtcars, aes(x = mpg)) +
+        geom_histogram(aes(y = ..density..), fill = "red") +
+        stat_function(
+                fun = dnorm,
+                args = with(mtcars, c(mean = mean(mpg), sd = sd(mpg))))
+        
+
