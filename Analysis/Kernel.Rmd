@@ -97,7 +97,7 @@ chisq.test(sex_x_survived)
 hist(full$Age)
 ```
 
-It looks like we have few over the age of 60, but let's group the cage ranges into groups or bins.  The other aspect to consider is that this is not normally distributed, we have a long tail to the right - it is right skewed.  For some models this may cause a problem, so it may be neccessary to transform this, porbably using a logarithmic transformation.   
+It looks like we have few over the age of 60, but let's group the age ranges into groups or bins.  The other aspect to consider is that this is not normally distributed, we have a long tail to the right - it is right skewed.  For some models this may cause a problem, so it may be neccessary to transform this, porbably using a logarithmic transformation.   
 
 ```{r}
 full$Agebin <- cut(full$Age, seq(0,90,10), right=FALSE, 
@@ -122,12 +122,17 @@ Agebin_Freq <- cbind( Freq=table(full$Agebincmb), Cumul=cumsum(table(full$Agebin
 Agebin_Freq <- transform(Agebin_Freq) 
 Agebin_Freq$Proportion <- paste(round(Agebin_Freq$Proportion * 100, digits=1),"%",sep="") 
 grid.table(Agebin_Freq) 
+
+#WIP to create stacked bar chart
 qplot(factor(Agebincmb), data=full[1:891,], geom="bar", fill=factor(Survived)) +
       geom_text(aes(label = Agebin_Freq$Proportion), size = 3, hjust = 0.5, vjust = 3, position =     "stack")
 #Need to count the number of survived and died for each age group for creation of stacked bar above
 #http://stackoverflow.com/questions/6644997/showing-data-values-on-stacked-bar-chart-in-ggplot2
 #http://docs.ggplot2.org/current/geom_text.html
 ```
+
+##Sanbox for histogram with normal curve##
+##########################################
 
 #works to create histogram and density plot, but need to add normal curve as a secondary density plot
 ggplot (data=full[1:891,], aes(x=Age)) +
@@ -139,7 +144,7 @@ geom_density(alpha=.2, fill= "red")
 
 
 #http://stackoverflow.com/questions/6967664/ggplot2-histogram-with-normal-curve
-#works to create two density plots, one with a random normal 1000 samples one with...?
+#works to create two density plots, one with a random normal 1000 samples one with a normal density curve
 z <- rnorm(1000)
 
 qplot(z, geom = "blank") + 
@@ -154,11 +159,15 @@ scale_colour_manual(name = "", values = c("red", "green"),
                                breaks = c("bla", "blabla"), 
                                labels = c("kernel_est", "norm_curv")) 
 
-#http://r.789695.n4.nabble.com/Howto-fit-normal-curve-into-histogram-using-GGPLOT2-td898609.html#
-ggplot(mtcars, aes(x = mpg)) +
-        geom_histogram(aes(y = ..density..), fill = "red") +
-        stat_function(
-                fun = dnorm,
-                args = with(mtcars, c(mean = mean(mpg), sd = sd(mpg))))
-        
 
+#will create a normally distributed recursive sample with mean 40        
+mysamp <- function(n, m, s, lwr, upr, rounding) {
+  samp <- round(rnorm(n, m, s), rounding)
+  samp[samp < lwr] <- lwr
+  samp[samp > upr] <- upr
+  samp
+}
+
+set.seed(8)
+x <- mysamp(n=1000, m=40, s=10, lwr=0, upr=80, rounding=2)
+#http://stackoverflow.com/questions/19343133/setting-upper-and-lower-limits-in-rnorm
