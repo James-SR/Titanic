@@ -133,10 +133,13 @@ Agebin_Freq$Proportion <- paste(round(Agebin_Freq$Proportion * 100, digits=1),"%
 grid.table(Agebin_Freq) 
 
 #WIP to create stacked bar chart
-qplot(factor(Agebincmb), data=full[1:891,], geom="bar", fill=factor(Survived)) +
-      geom_text(aes(label = Agebin_Freq$Proportion), size = 3, hjust = 0.5, vjust = 3, position =     "stack")
-#Need to count the number of survived and died for each age group for creation of stacked bar above
-#http://stackoverflow.com/questions/6644997/showing-data-values-on-stacked-bar-chart-in-ggplot2
-#http://docs.ggplot2.org/current/geom_text.html
+agebin_x_survived <-table(full[1:891,]$Agebincmb, full[1:891,]$Survived) # create cross tab for plot
+agebin_x_survived <- data.frame(agebin_x_survived) 
+names(agebin_x_survived)[names(agebin_x_survived)=="Var1"] <- "Age"
+names(agebin_x_survived)[names(agebin_x_survived)=="Var2"] <- "Survived"
+ggplot(data = agebin_x_survived, aes(x = Age, y = Freq, fill = Survived)) + geom_bar(stat="identity") +
+  labs(title="Survival by Age Group") +
+  #ADD COUNTS TO CHART or possibly %
+
 ```
 
