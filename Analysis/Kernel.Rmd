@@ -33,6 +33,7 @@ library('ggplot2')                                          # visualization
 library('dplyr')                                            # data manipulation
 library('Amelia')                                           # missing values
 library('gridExtra')                                        # for nicely formatted tables
+
 ```
 
 First lets combine the test and train datasets then get a feel for what data there is to work with.
@@ -132,14 +133,27 @@ Agebin_Freq <- transform(Agebin_Freq)
 Agebin_Freq$Proportion <- paste(round(Agebin_Freq$Proportion * 100, digits=1),"%",sep="") 
 grid.table(Agebin_Freq) 
 
-#WIP to create stacked bar chart
+#Next we are going to create two cross tabs for the creation of bar charts, one including NA values
 agebin_x_survived <-table(full[1:891,]$Agebincmb, full[1:891,]$Survived) # create cross tab for plot
 agebin_x_survived <- data.frame(agebin_x_survived) 
 names(agebin_x_survived)[names(agebin_x_survived)=="Var1"] <- "Age"
 names(agebin_x_survived)[names(agebin_x_survived)=="Var2"] <- "Survived"
-ggplot(data = agebin_x_survived, aes(x = Age, y = Freq, fill = Survived)) + geom_bar(stat="identity") +
-  labs(title="Survival by Age Group") +
+
+agebin_x_survived_NA <- table(full[1:891,]$Agebincmb, full[1:891,]$Survived, useNA = "ifany")
+agebin_x_survived_NA <- data.frame(agebin_x_survived_NA) 
+names(agebin_x_survived_NA)[names(agebin_x_survived_NA)=="Var1"] <- "Age"
+names(agebin_x_survived_NA)[names(agebin_x_survived_NA)=="Var2"] <- "Survived"
+
+#Next we create the two plots based on the two tables just created
+p1 <- ggplot(data = agebin_x_survived, aes(x = Age, y = Freq, fill = Survived)) + geom_bar(stat="identity") +
+  labs(title="Survival by Age Group") 
   #ADD COUNTS TO CHART or possibly %
 
+p2 <- ggplot(data = agebin_x_survived_NA, aes(x = Age, y = Freq, fill = Survived)) + geom_bar(stat="identity") +
+  labs(title="Survival by Age Group - including NAs") 
+  #ADD COUNTS TO CHART or possibly %
+
+#we now arrange the two bar charts in a grid with two columns
+grid.arrange(p1, p2, ncol=2)
 ```
 
