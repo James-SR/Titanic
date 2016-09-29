@@ -39,8 +39,8 @@ library('gridExtra')                                        # for nicely formatt
 First lets combine the test and train datasets then get a feel for what data there is to work with.
 
 ```{r, message=FALSE, warning=FALSE}
-train <- read.csv('Data/1.Raw/train.csv', stringsAsFactors = F)
-test  <- read.csv('Data/1.Raw/test.csv', stringsAsFactors = F)
+train <- read.csv('../Data/1.Raw/train.csv', stringsAsFactors = F)
+test  <- read.csv('../Data/1.Raw/test.csv', stringsAsFactors = F)
 
 full  <- bind_rows(train, test)                             # bind training & test data
 
@@ -55,8 +55,6 @@ levels(full$Survived) <- c("Survived", "Died")
 summary(full)                                              # re-check data
 ```
 
-
-<<Discuss family make up>>
 
 We've got a sense of our variables, their class type, and the first few observations of each. We know we're working with 1309 observations of 12 variables. Our first step is to get a feel for that data using EDA.
 
@@ -80,19 +78,9 @@ grid.table(NA_Count)                                      # produce the output t
 
 As expected, Age does have the highest number of missing values (263), with only Fare having one other missing value.
 
-Next we can begin to look at the variables in more detail.  First, let's see what the age distribution of survivors looks like, by Sex.
+## One way survival variable exploration 
 
-```{r}
-ggplot(aes(y = Age, x = Sex, fill = Survived), data = full[1:891,]) + geom_boxplot() # we exclude the test data
-```
-
-Interestingly the average age of males who died is older than those who survived, whereas the situation is reversed for females, with the average age of females who died being younger than those who survived.
-
-```{r}
-sex_x_survived <-table(full[1:891,]$Sex, full[1:891,]$Survived)
-grid.table(sex_x_survived)
-chisq.test(sex_x_survived)
-```
+Next we can begin to look at the variables in more detail.  First, let's explore age.
 
 ```{r}
 #hist(full$Age) - basic histogram
@@ -107,7 +95,7 @@ ggplot (data=full[1:891,], aes(x=Age)) +
 #then doing Age_hist + facet_grid(. ~ Survived) after, for two seperate histograms
 ```
 
-It looks like we have few over the age of 60, but let's group the age ranges into groups or bins.  The other aspect to consider is that this is not normally distributed, we have a long tail to the right - it is right skewed.  For some models this may cause a problem, so it may be neccessary to transform this, porbably using a logarithmic transformation.   
+It looks like we have few over the age of 60, but let's group the age ranges into groups or bins.  The other aspect to consider is that this is not normally distributed, we have a long tail to the right - it is right skewed. We can see the density curve of passengers (red) is different from the more normally distributed density curve (blue).  For some models this may cause a problem, so it may be neccessary to transform this, porbably using a logarithmic transformation.   
 
 ```{r}
 full$Agebin <- cut(full$Age, seq(0,90,10), right=FALSE, 
@@ -119,7 +107,7 @@ Agebin_Freq$Proportion <- paste(round(Agebin_Freq$Proportion * 100, digits=1),"%
 grid.table(Agebin_Freq)                                   
 ```
 
-As suspected, the actual number over the age of 60 is quite small, so lets combined the over 60s in to a single group.
+As suspected, the actual number over the age of 60 is quite small, so lets combined the over 60s in to a single group then see what the distribution is like of surivival by age group by using some stacked bar charts.
 
 ```{r}
 # Recode into over 60s factor, the second line moves the over 60s to the correct place at the end of the factors rather than the
@@ -157,3 +145,32 @@ p2 <- ggplot(data = agebin_x_survived_NA, aes(x = Age, y = Freq, fill = Survived
 grid.arrange(p1, p2, ncol=2)
 ```
 
+The second chart helps to highlight some of the problems with missing (NA) values.  Without the NA values included, there is a large portion of our passengers missing from the analysis.  In addition, it appears that the proportion of those with missing age values who have surivived, is much lower than for some of the other age groups, so we perhaps need to look at this group in more detail or risk missing something important in the underlying structure of survivorship.
+
+One option for handling the missing values would be to use an average passenger age across the known values and apply this average to the missing values.  However a more nuaned approach would be to explore the relationships between survival and the other variables at our disposal in the data set, going on to make a more informed estimation of the age value using imputatation.
+
+## Two way survival variable exploration 
+
+First, let's see what the age distribution of survivors looks like, by sex and age.
+
+```{r}
+ggplot(aes(y = Age, x = Sex, fill = Survived), data = full[1:891,]) + geom_boxplot() # we exclude the test data
+```
+
+Interestingly the average age of males who died is older than those who survived, whereas the situation is reversed for females, with the average age of females who died being younger than those who survived.  Looking at this plot alone, it is a little hard to see if there is a statistically significant relationship.  If we structure the data as a table and run a chi squared test we may get a better idea where there is a true relationship between sex and survival.
+
+```{r}
+sex_x_survived <-table(full[1:891,]$Sex, full[1:891,]$Survived)
+grid.table(sex_x_survived)
+chisq.test(sex_x_survived)
+```
+
+But what about surival by sex AND age?  
+
+
+
+
+
+
+
+## Multiple (N) way survival variable exploration 
