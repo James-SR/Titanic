@@ -10,8 +10,6 @@ output:
     number_sections: yes
     theme: readable
     toc: yes
-  pdf_document:
-    toc: yes
 ---
 
 # Introduction
@@ -33,7 +31,7 @@ library('ggplot2')                                          # visualization
 library('dplyr')                                            # data manipulation
 library('Amelia')                                           # missing values
 library('gridExtra')                                        # for nicely formatted tables
-
+library('vcd')                                              # for Odds Ratio and Woolf test of contigency tables
 ```
 
 First lets combine the test and train datasets then get a feel for what data there is to work with.
@@ -174,3 +172,13 @@ But what about surival by sex AND age?
 
 
 ## Multiple (N) way survival variable exploration 
+
+```{r}
+mytable <- xtabs(~full[1:891,]$Sex + full[1:891,]$Survived + full[1:891,]$Agebincmb, data=full)
+ftable(mytable)
+mantelhaen.test(mytable)
+oddsratio(mytable, log=TRUE) 
+woolf_test(mytable)
+#Those that have died, have a statisticaly higher male proportion than females, after controlling for the different age groups
+```
+
