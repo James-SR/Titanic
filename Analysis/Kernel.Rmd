@@ -152,7 +152,8 @@ One option for handling the missing values would be to use an average passenger 
 First, let's see what the age distribution of survivors looks like, by sex and age.
 
 ```{r}
-ggplot(aes(y = Age, x = Sex, fill = Survived), data = full[1:891,]) + geom_boxplot() # we exclude the test data
+ggplot(aes(y = Age, x = Sex, fill = Survived), data = full[1:891,]) + geom_boxplot() +
+labs(title="Survival by Sex and Age") # we exclude the NA values
 ```
 
 Interestingly the average age of males who died is older than those who survived, whereas the situation is reversed for females, with the average age of females who died being younger than those who survived.  Looking at this plot alone, it is a little hard to see if there is a statistically significant relationship.  If we structure the data as a table and run a chi squared test we may get a better idea where there is a true relationship between sex and survival.
@@ -177,8 +178,19 @@ But what about surival by sex AND age?
 mytable <- xtabs(~full[1:891,]$Sex + full[1:891,]$Survived + full[1:891,]$Agebincmb, data=full)
 ftable(mytable)
 mantelhaen.test(mytable)
+```
+First we are using the Cochran–Mantel–Haenszel (CMH) test sees whether we can reject the null hypotesis, which is there is no relationship between sex and survival, after controlling for the different groups - age in our example.  Under the test, each group is treated as different - different location, time or strudy group.  In our example this may be seen as streteching the (statistical) facts a little, although it is not impossible to think of the woman and children getting off the boat at a different time. However, the CMH test is more about testing data that has been collected in more fundamentally different ways, such as testing the sex and surival rates across different boats over different years, where the collection is fundamentally more independent across the different groups. 
+
+With these caveats, the null hypothesis we are testing is that the proportion of people surviving is the same for males and females, after controlling for the the group. In our test, the CMH is statistically significant, indicating that there are more women than men suriving, across the different age groups.
+
+But is this the whole story?  
+
+```{r}
 oddsratio(mytable, log=TRUE) 
 woolf_test(mytable)
-#Those that have died, have a statisticaly higher male proportion than females, after controlling for the different age groups
 ```
 
+Test using GLM including interactions
+
+glm(formula = Survived ~ Sex + Age, family = binomial, data = DF)
+glm(formula = Survived ~ Sex * Sex, family = binomial, data = DF)
