@@ -31,7 +31,8 @@ library('ggplot2')                                          # visualization
 library('dplyr')                                            # data manipulation
 library('Amelia')                                           # missing values
 library('gridExtra')                                        # for nicely formatted tables
-library('vcd')                                              # for Odds Ratio and Woolf test of contigency tables
+library('vcd')                                              # Odds Ratio and Woolf tests
+library('corrplot')                                         # Correlograms
 ```
 
 First lets combine the test and train datasets then get a feel for what data there is to work with.
@@ -174,11 +175,26 @@ But what about surival by sex AND age?
 
 ## Multiple (N) way survival variable exploration 
 
+We have already seen that there does appear to be a statistically significant relationship between the passengers gender (Sex) and their suvival.  If we have continous variables we can use a correlogram, which will help to visualise data and relationships within a correlation table.  Let us see such an example using just the quantative variables.
+
 ```{r}
-mytable <- xtabs(~full[1:891,]$Sex + full[1:891,]$Survived + full[1:891,]$Agebincmb, data=full)
-ftable(mytable)
-mantelhaen.test(mytable)
+full_reduce <- as.data.frame(full[1:891, c(3,6,7,8,10) ], drop=false)
+Var_Corr <- cor(full_reduce)
+corrplot(Var_Corr, method="circle")
 ```
+
+Here we can see that the missing values in age are still causing problems. Clearly this needs to be dealt with before we do any detailed modelling. However,it does suggest a negative relationship with passenger class and the fare that they paid - lower class passengers paid a lower price.  Relationships amungst the other variables appear a little scant, although there does seem to be a positive relationship between the number parents aboard (Parch) and the number of siblings/spouses aboard (SibSp) which we can expect to be the case.  
+
+Using a corrgram should be done with caution at this point, as we ideally should transform all the data so they are on a similar scale. Some of the variables - such as passegner class - are cateogrical variables masquerading as continous variables.  We will address this later.
+
+So we previoulsy found a statistically significant relationship between survival and sex or gender.  We also saw that there appeared to be a relationship by survival and age.  Now we can combine these two variables together and test their relationship against survival, as we are dealing with a categorical variable as the output (surival) we can use a contingency table.  
+
+```{r}
+CTab_AgeSex <- xtabs(~full[1:891,]$Sex + full[1:891,]$Survived + full[1:891,]$Agebincmb, data=full)
+ftable(CTab_AgeSex)
+mantelhaen.test(CTab_AgeSex)
+```
+
 First we are using the Cochran–Mantel–Haenszel (CMH) test sees whether we can reject the null hypotesis, which is there is no relationship between sex and survival, after controlling for the different groups - age in our example.  Under the test, each group is treated as different - different location, time or strudy group.  In our example this may be seen as streteching the (statistical) facts a little, although it is not impossible to think of the woman and children getting off the boat at a different time. However, the CMH test is more about testing data that has been collected in more fundamentally different ways, such as testing the sex and surival rates across different boats over different years, where the collection is fundamentally more independent across the different groups. 
 
 With these caveats, the null hypothesis we are testing is that the proportion of people surviving is the same for males and females, after controlling for the the group. In our test, the CMH is statistically significant, indicating that there are more women than men suriving, across the different age groups.
@@ -186,8 +202,8 @@ With these caveats, the null hypothesis we are testing is that the proportion of
 But is this the whole story?  
 
 ```{r}
-oddsratio(mytable, log=TRUE) 
-woolf_test(mytable)
+oddsratio(CTab_AgeSex, log=TRUE) 
+woolf_test(CTab_AgeSex)
 ```
 
 Test using GLM including interactions
