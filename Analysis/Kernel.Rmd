@@ -206,7 +206,23 @@ oddsratio(CTab_AgeSex, log=TRUE)
 woolf_test(CTab_AgeSex)
 ```
 
-Test using GLM including interactions
+We can use GLM with a binomial or logit link aka logistic model.  It is useful to remind ourselves what levels the data are in for the surival outcome variable, since a logistic model takes 'success' as having the second level.  To do so, we use the contrasts function
 
-glm(formula = Survived ~ Sex + Age, family = binomial, data = DF)
-glm(formula = Survived ~ Sex * Sex, family = binomial, data = DF)
+```{r}
+contrasts (full$Survived)
+```
+
+So in our case surival is use as the reference level so any stistically significant differences will apply to those who have died.
+
+```{r}
+GLM1 <- glm(formula = Survived ~ Sex + Age, family = binomial, data = full[1:891,])
+summary (GLM1)
+```
+
+```{r}
+GLM2 <- glm(formula = Survived ~ Sex * Age, family = binomial, data = full[1:891,])
+summary (GLM2)
+```
+
+
+
