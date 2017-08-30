@@ -37,6 +37,8 @@ library(mice)                                               # for handing missin
 library(data.table)                                         # for sparse matrix data table setup
 library(Matrix)                                             # for one hot encoding with sparsematrix
 library(xgboost)                                            # for xgboost algorithm
+library(caret)                                              # For model evaulation and tuning
+library(ROCR)
 ```
 
 First lets combine the test and train datasets then get a feel for what data there is to work with.
@@ -326,12 +328,14 @@ sparse_matrix_test <- sparse.model.matrix(Survived~.-1, data=df2)
 #Run cross validated xgboost
 cv <- xgb.cv(data = sparse_matrix,
                label = df$Survived,
-               max.depth = 6,
-               eta = 0.3,
+               max.depth = 7,
+               eta = 0.1,
                nrounds = 1000,
-               nfold = 10,
+               nfold = 5,
+               eval_metric = "error",
                objective = "reg:logistic",
-               verbose = 2
+               print_every_n = 50,
+               verbose = 1
 )
 
 # Get the evaluation log 
@@ -339,17 +343,17 @@ elog <- as.data.frame(cv$evaluation_log)
 
 # Determine and print how many trees minimize training and test error
 elog %>% 
-   summarize(ntrees.train = which.min(elog$train_rmse_mean),   # find the index of min(train_rmse_mean)
-             ntrees.test  = which.min(elog$test_rmse_mean))   # find the index of min(test_rmse_mean)
+   summarize(ntrees.train = which.min(elog$train_error_mean),   # find the index of min(train_rmse_mean)
+             ntrees.test  = which.min(elog$test_error_mean))   # find the index of min(test_rmse_mean)
 
 # Set the number of trees to use, as determined by xgb.cv 
-ntrees  = which.min(elog$test_rmse_mean)
+ntrees  = which.min(elog$test_error_mean)
 
 # Run xgb
 xgb <- xgboost(data = sparse_matrix,
                       label = df$Survived,
-                      max.depth = 6,
-                      eta = 0.2,
+                      max.depth = 7,
+                      eta = 0.1,
                       nrounds = ntrees,
                       objective = "reg:logistic",
                       verbose = 2)
@@ -357,7 +361,7 @@ xgb <- xgboost(data = sparse_matrix,
 # Save the variables and print the top 10 most important factors
 importance <- xgb.importance(feature_names = sparse_matrix@Dimnames[[2]], model = xgb)
 xgb.plot.importance(importance[1:10,])
-xgb.plot.tree(feature_names = sparse_matrix@Dimnames[[2]], model = xgb)
+#xgb.plot.tree(feature_names = sparse_matrix@Dimnames[[2]], model = xgb)
 
 # Make predictions on our original training data 
 train$pred <- predict(xgb, sparse_matrix)
@@ -365,10 +369,32 @@ train$pred <- predict(xgb, sparse_matrix)
 # Calculate error by convert the probability (as a decimal) to a binary outcome (1 or 0) with a 50% (0.5) cutoff point
 err <- mean(as.numeric(train$pred > 0.5) != df$Survived)
 print(paste("test-error=", err)) # calculate the amount of error
+train$predicted <- ifelse(train$pred > 0.5, 1, 0) # save the result as a binary outcome
+
+# Create the confusion matrix
+confusionMatrix(train$predicted, train$Survived, positive="1")
+# Sensitivity = true positive rate, Specificty = true negative rate, Kappa score 0.6-0.8 is good/substantial, 0.81+ is very good/excellent, <0.2 Poor/slight
+
+# Crete ROC Curve
+xgb.pred <- prediction(train$pred, train$Survived)
+xgb.perf <- performance(xgb.pred, "tpr", "fpr")
+{plot(xgb.perf,
+     avg="threshold",
+     colorize=TRUE,
+     lwd=1,
+     main="ROC Curve w/ Thresholds",
+     print.cutoffs.at=seq(0, 1, by=0.05),
+     text.adj=c(-0.5, 0.5),
+     text.cex=0.5)
+  grid(col="lightgray")
+  axis(1, at=seq(0, 1, by=0.1))
+  axis(2, at=seq(0, 1, by=0.1))
+  abline(v=c(0.1, 0.3, 0.5, 0.7, 0.9), col="lightgray", lty="dotted")
+  abline(h=c(0.1, 0.3, 0.5, 0.7, 0.9), col="lightgray", lty="dotted")
+  lines(x=c(0, 1), y=c(0, 1), col="black", lty="dotted")}
 
 # Predict the data using the test data and convert to a binary
 test$pred <- predict(xgb, sparse_matrix_test)
-
 test$pred <- ifelse(test$pred > 0.5, 1, 0)
 
 # Save the solution to a dataframe with two columns: PassengerId and Survived (prediction)
