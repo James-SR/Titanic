@@ -33,6 +33,9 @@ library('Amelia')                                           # missing values
 library('gridExtra')                                        # for nicely formatted tables
 library('vcd')                                              # Odds Ratio and Woolf tests
 library('corrplot')                                         # Correlograms
+library(mice)
+library(data.table)
+library(Matrix) # for one hot encoding with sparsematrix
 ```
 
 First lets combine the test and train datasets then get a feel for what data there is to work with.
@@ -224,5 +227,170 @@ GLM2 <- glm(formula = Survived ~ Sex * Age, family = binomial, data = full[1:891
 summary (GLM2)
 ```
 
+## Dealing with missing values
 
+First, let's create a title variable to help with modelling
+
+```{r}
+# Grab title from passenger names
+full$Title <- gsub('(.*, )|(\\..*)', '', full$Name)
+
+# Show title counts by sex
+table(full$Sex, full$Title)
+```
+
+```{r}
+# Titles with very low cell counts to be combined to "rare" level
+rare <- c('Dona', 'Lady', 'the Countess','Capt', 'Col', 'Don', 
+                'Dr', 'Major', 'Rev', 'Sir', 'Jonkheer')
+
+# Also reassign mlle, ms, and mme accordingly
+full$Title[full$Title == 'Mlle']        <- 'Miss' 
+full$Title[full$Title == 'Ms']          <- 'Miss'
+full$Title[full$Title == 'Mme']         <- 'Mrs' 
+full$Title[full$Title %in% rare]        <- 'Rare'
+
+# Show title counts by sex again
+table(full$Sex, full$Title)
+```
+
+```{r}
+# Finally, grab surname from passenger name
+full$Surname <- sapply(full$Name,  
+                      function(x) strsplit(x, split = '[,.]')[[1]][1])
+```
+
+```{r}
+# Create a family size variable including the passenger themselves
+full$Fsize <- full$SibSp + full$Parch + 1
+
+# Create a family variable 
+full$Family <- paste(full$Surname, full$Fsize, sep='_')
+
+# Discretize family size
+full$FsizeD[full$Fsize == 1] <- 'single'
+full$FsizeD[full$Fsize < 5 & full$Fsize > 1] <- 'small'
+full$FsizeD[full$Fsize > 4] <- 'large'
+
+```
+
+
+
+```{r}
+# Make variables factors into factors
+factor_vars <- c('PassengerId','Pclass','Sex','Embarked',
+                 'Title','Surname','Family','FsizeD')
+
+full[factor_vars] <- lapply(full[factor_vars], function(x) as.factor(x))
+
+# Set a random seed
+set.seed(129)
+
+# Perform mice imputation, excluding certain less-than-useful variables:
+mice_mod <- mice(full[, !names(full) %in% c('PassengerId','Name','Ticket','Cabin','Family','Surname','Survived')], method='rf')
+
+# Save the complete output 
+mice_output <- complete(mice_mod)
+
+# Replace Age variable from the mice model.
+full$Age <- mice_output$Age
+
+```
+
+```{r}
+# Split the dataset for modelling
+train <- full[1:891,]
+test <- full[892:1309,]
+
+# Replace missing fare value with median for the passenger class 3 and those who embarked from Southampton
+full$Fare[1044] <- median(full[full$Pclass == '3' & full$Embarked == 'S', ]$Fare, na.rm = TRUE)
+
+# Set as data.tables for one hot encoding / spare matrix
+df <-data.table(train)
+df2 <-data.table(test)
+df2$Survived <- 0 # so NA values do not appear yet we can still proceed with one hot encoding, this will be dropped anyway
+
+#create discreet groups for Age
+head(df[, AgeDiscreet := as.factor(round(Age/10,0))])
+head(df2[, AgeDiscreet := as.factor(round(Age/10,0))])
+
+#Perfom one hot encoding to convert categorical in to dummy vars, removing our label (predicted) column
+sparse_matrix <- sparse.model.matrix(Survived~.-1, data=df)
+
+#Perfom one hot encoding to convert categorical in to dummy vars for our test data
+sparse_matrix_test <- sparse.model.matrix(Survived~.-1, data=df2)
+                                          
+
+#Run cross validated xgboost
+cv <- xgb.cv(data = sparse_matrix,
+               label = df$Survived,
+               max.depth = 6,
+               eta = 0.3,
+               nrounds = 1000,
+               nfold = 5,
+               objective = "reg:logistic",
+               verbose = 2
+)
+
+# Save the variables and print the top 10 most important factors
+importance <- xgb.importance(feature_names = sparse_matrix@Dimnames[[2]], model = bst)
+xgb.plot.importance(importance[1:10,])
+
+# Get the evaluation log 
+elog <- as.data.frame(cv$evaluation_log)
+
+# Determine and print how many trees minimize training and test error
+elog %>% 
+   summarize(ntrees.train = which.min(elog$train_rmse_mean),   # find the index of min(train_rmse_mean)
+             ntrees.test  = which.min(elog$test_rmse_mean))   # find the index of min(test_rmse_mean)
+
+# Set the number of trees to use, as determined by xgb.cv 
+ntrees  = which.min(elog$test_rmse_mean)
+
+# Run xgb
+xgb <- xgboost(data = sparse_matrix,
+                      label = df$Survived,
+                      max.depth = 6,
+                      eta = 0.3,
+                      nrounds = ntrees,
+                      objective = "reg:logistic",
+                      verbose = 2)
+
+# Make predictions on our original training data 
+train$pred <- predict(xgb, sparse_matrix)
+
+# Calculate error by convert the probability (as a decimal) to a binary outcome (1 or 0) with a 50% (0.5) cutoff point
+err <- mean(as.numeric(train$pred > 0.5) != df$Survived)
+print(paste("test-error=", err)) # calculate the amount of error
+
+# Predict the data using the test data and convert to a binary
+test$pred <- predict(xgb, sparse_matrix_test)
+
+test$pred <- ifelse(test$pred > 0.5, 1, 0)
+
+# Save the solution to a dataframe with two columns: PassengerId and Survived (prediction)
+solution <- data.frame(PassengerID = test$PassengerId, Survived = test$pred)
+
+# write solution
+write.csv(solution, file = 'xgbSolution.csv', row.names = F)
+
+# We can the explore the second and third order interactions outside of R using xgbi - code below creates the two files that are needed
+# see http://projects.rajivshah.com/blog/2016/08/01/xgbfi/ 
+
+featureList <- names(df[,-2]) # remove Survived variable
+featureVector <- c() 
+for (i in 1:length(featureList)) { 
+  featureVector[i] <- paste(i-1, featureList[i], "q", sep="\t") 
+}
+write.table(featureVector, "fmap.txt", row.names=FALSE, quote = FALSE, col.names = FALSE)
+xgb.dump(model = xgb, fname = 'xgb.dump', with_stats = TRUE)
+
+featureList <- sparse_matrix@Dimnames[[2]]  # this is the correct variable names, but xgb.dump does not appear to like them - most likely the name variable
+featureVector <- c() 
+for (i in 1:length(featureList)) { 
+  featureVector[i] <- paste(i-1, featureList[i], "q", sep="-") 
+}
+write.table(featureVector, "fmap.txt", row.names=FALSE, quote = FALSE, col.names = FALSE)
+
+```
 
