@@ -33,9 +33,10 @@ library('Amelia')                                           # missing values
 library('gridExtra')                                        # for nicely formatted tables
 library('vcd')                                              # Odds Ratio and Woolf tests
 library('corrplot')                                         # Correlograms
-library(mice)
-library(data.table)
-library(Matrix) # for one hot encoding with sparsematrix
+library(mice)                                               # for handing missing data
+library(data.table)                                         # for sparse matrix data table setup
+library(Matrix)                                             # for one hot encoding with sparsematrix
+library(xgboost)                                            # for xgboost algorithm
 ```
 
 First lets combine the test and train datasets then get a feel for what data there is to work with.
@@ -320,6 +321,7 @@ sparse_matrix <- sparse.model.matrix(Survived~.-1, data=df)
 #Perfom one hot encoding to convert categorical in to dummy vars for our test data
 sparse_matrix_test <- sparse.model.matrix(Survived~.-1, data=df2)
                                           
+#could try grid search with caret see https://www.kaggle.com/jimthompson/ensemble-model-stacked-model-example and https://stats.stackexchange.com/questions/171043/how-to-tune-hyperparameters-of-xgboost-trees
 
 #Run cross validated xgboost
 cv <- xgb.cv(data = sparse_matrix,
@@ -327,14 +329,10 @@ cv <- xgb.cv(data = sparse_matrix,
                max.depth = 6,
                eta = 0.3,
                nrounds = 1000,
-               nfold = 5,
+               nfold = 10,
                objective = "reg:logistic",
                verbose = 2
 )
-
-# Save the variables and print the top 10 most important factors
-importance <- xgb.importance(feature_names = sparse_matrix@Dimnames[[2]], model = bst)
-xgb.plot.importance(importance[1:10,])
 
 # Get the evaluation log 
 elog <- as.data.frame(cv$evaluation_log)
@@ -351,10 +349,15 @@ ntrees  = which.min(elog$test_rmse_mean)
 xgb <- xgboost(data = sparse_matrix,
                       label = df$Survived,
                       max.depth = 6,
-                      eta = 0.3,
+                      eta = 0.2,
                       nrounds = ntrees,
                       objective = "reg:logistic",
                       verbose = 2)
+
+# Save the variables and print the top 10 most important factors
+importance <- xgb.importance(feature_names = sparse_matrix@Dimnames[[2]], model = xgb)
+xgb.plot.importance(importance[1:10,])
+xgb.plot.tree(feature_names = sparse_matrix@Dimnames[[2]], model = xgb)
 
 # Make predictions on our original training data 
 train$pred <- predict(xgb, sparse_matrix)
