@@ -26,6 +26,8 @@ There are N parts to my script as follows:
 ## Load and check data
 
 ```{r, message = FALSE}
+# Note that Amelia and RXGBfi are GitHub only so require devtools for installation.
+
 # Load packages
 library(ggplot2)                                          # visualization
 library(dplyr)                                            # data manipulation
