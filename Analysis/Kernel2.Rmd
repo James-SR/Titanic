@@ -47,11 +47,21 @@ full  <- bind_rows(train, test)                             # bind training & te
 
 summary(full)                                               # check data
 ```
-Here we can see that the summary makes sense for some variables - Age is a continous variable ranging from an infant (0.17 years) up to a possible grandfather (80 years), with 263 missing values (NAs). For other variables, such as the passenger's sex, whether they survived and their port of embarkation it would make more sense for these variables - currently a mix of numeric and charecter variables - to be groups of individuals, which in R are called factors aka categorical variables.  Classifying these variables correctly as factors will mean that any functions, plots or models will behave themselves correctly and produce the expected results.
+Here we can see that the summary makes sense for some variables - Age is a continous variable ranging from an infant (0.17 years) up to a possible grandfather (80 years), with 263 missing values (NAs). For other variables, such as the passenger's sex, whether they survived and their port of embarkation it would make more sense for these variables - currently a mix of numeric and charecter variables - to be grouped.  Classifying these variables correctly as factors will mean that any functions, plots or models will behave themselves correctly and produce the expected results.
 
 ```{r}
+# Define the survived variable
 full$Survived <- factor(full$Survived, levels=c(1,0))
 levels(full$Survived) <- c("Survived", "Died")
+
+# Change variables into factors not integers
+full$Pclass <- as.factor(full$Pclass)
+full$PSex <- as.factor(full$Sex)
+full$SibSp <- as.factor(full$SibSp)
+full$Parch <- as.factor(full$Parch)
+full$Cabin <- as.factor(full$Cabin)
+full$Embarked <- as.factor(full$Embarked)
+full$Survived <- as.factor(full$Survived)
 str(full)                                              # re-check data
 ```
 
@@ -149,22 +159,29 @@ grid.arrange(p1, p2, ncol=2)
 
 The second chart helps to highlight some of the problems with missing (NA) values.  Without the NA values included, there is a large portion of our passengers missing from the analysis.  In addition, it appears that the proportion of those with missing age values who have surivived, is much lower than for some of the other age groups, so we perhaps need to look at this group in more detail or risk missing something important in the underlying structure of survivorship. 
 
-We have two numeric variables - age and fare - and we have seen that age is not normally distributed.  What about fare?  
+Before proceeding, it is worht looking at the other numeric variable, fare.  We have seen that age is not normally distributed.  What about fare?  
 
 ```{r}
-ggplot(data=full, aes(Fare)) + geom_histogram()
+ggplot(data=full, aes(Fare)) + 
+  geom_histogram() +
+  labs(title="Age by Log Transformed Fare")
 ```
 
-
-There is a definite right skew in the Fares, similar to age but much more skewed.  Before we proceed, it is a good idea to log transform Fare, then observe the resulting scatterplot of these two variables, to see if there is a relationship.  We might expect that as the person's age increases, so might their
+There is a definite right skew in the Fares, similar to age but much more skewed.  If we remove this skew by log transforming Fare, we can then observe the resulting scatterplot of these two variables, to see if there is a relationship.  We might expect that as the person's age increases, so might the fare paid.  We can calculate the strength and direction of this relationship using Spearman's Rho, which is more suitable for this data than Pearson's measure as we have some outliers for fare, even after transformation, which may determintetally influence the calculation of the Pearson measure.
 
 ```{r}
+# Produce the scatterplot
 full$LogFare <- log(full$Fare)
 ggplot(full, aes(x=Age, y=logFare)) +
   geom_point() +
-  geom_smooth(method=lm)
+  geom_smooth(method=lm) +
+  labs(title="Age by Log Transformed Fare")
+
+# Calculate correlation
+cor.test(full$Age, full$logFare, method = "spearman")
 ```
 
+The p-value suggests there is a statistically significant relationship (correlation) between these two variables, however given the rho measure is quite low - 0.19 on a scale of +1 to -1 - this suggest the relationship is weak.
 
 
 ## Dealing with missing values
@@ -179,14 +196,7 @@ So firstly, we should also specify any nominal variables in the data set be spec
 
 ```{r}
 
-# change categorical variables into factors not integers
-full$Pclass <- as.factor(full$Pclass)
-full$PSex <- as.factor(full$Sex)
-full$SibSp <- as.factor(full$SibSp)
-full$Parch <- as.factor(full$Parch)
-full$Cabin <- as.factor(full$Cabin)
-full$Embarked <- as.factor(full$Embarked)
-full$Survived <- as.factor(full$Survived)
+
 
 #noms = c('Pclass', 'Sex', 'SibSp', 'Parch', 'Cabin', 'Embarked', 'Survived' )
 #idvars = c('PassengerId', 'Name', 'Ticket')
