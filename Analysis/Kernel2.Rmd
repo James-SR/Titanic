@@ -1,66 +1,58 @@
 ---
-title: 'Exploring the Titanic Dataset :: Traditional approaches with new tools'
-author: "James Solomon-Rounce"
-date: ' 25th August 2016'
+title: "Traditional approaches with some new tools"
 output:
   html_document:
-    fig_height: 6
-    fig_width: 8
+    number_sections: TRUE
+    toc: TRUE
+    fig_height: 4
+    fig_width: 7
+    code_folding: show
     highlight: tango
-    number_sections: yes
-    theme: readable
-    toc: yes
 ---
+
+```{r setup, include=FALSE, echo=FALSE}
+knitr::opts_chunk$set(echo=TRUE)
+
+```
 
 # Introduction
 
-This is my first attempt at a Kaggle kernel, Kaggle seems like a great site so wanted to make a foray.  Coming from a social science background my approach may seem a little 'old school' but shows how I would approach the modelling process, mixed in with some newer machine learning (aka predictive analytics) approaches.  Feedback welcome, thanks for taking the time to read.  
-
-There are N parts to my script as follows:
-
-* Exploratory Data Analysis aka EDA
-* Feature engineering for prediction
-* Where is my data or what to do with missing values
-* Stick or caret - Predictions using multiple models 
-
-## Load and check data
+This is my first attempt at a Kaggle kernel, Kaggle seems like a great site so wanted to make a foray.  
+Coming from a social science background my approach may seem a little 'old school' but shows how I would approach the modelling process, mixed in with some newer machine learning (aka predictive analytics) approaches.  
+Feedback welcome, thanks for taking the time to read. 
 
 ```{r, message = FALSE}
-# Note that Amelia and RXGBfi are GitHub only so require devtools for installation.
-
 # Load packages
 library(ggplot2)                                          # visualization
 library(dplyr)                                            # data manipulation
-library(Amelia)                                           # missing values
+library(Amelia)                                           # for visualising missing data
 library(gridExtra)                                        # for nicely formatted tables
-library(vcd)                                              # Odds Ratio and Woolf tests
-library(corrplot)                                         # Correlograms
-library(mice)                                             # for handling missing data
+library(vcd)                                              # odds Ratio and Woolf tests
+library(corrplot)                                         # correlograms
 library(data.table)                                       # for sparse matrix data table setup
 library(Matrix)                                           # for one hot encoding with sparsematrix
 library(xgboost)                                          # for xgboost algorithm
-library(caret)                                            # For model evaulation and tuning
-library(ROCR)                                             # For model evaulation with ROC Curves
-library(RXGBfi)                                           # For XGB feature interaction Shiny App
+library(caret)                                            # for model evaulation and tuning
+library(ROCR)                                             # for model evaulation with ROC Curves
+library(Hmisc)                                            # for handling missing data
 ```
 
 First lets combine the test and train datasets then get a feel for what data there is to work with.
 
 ```{r, message=FALSE, warning=FALSE}
-train <- read.csv('../Data/1.Raw/train.csv', stringsAsFactors = F)
-test  <- read.csv('../Data/1.Raw/test.csv', stringsAsFactors = F)
+train <- read.csv('../Data/1.Raw/train.csv', stringsAsFactors = F, na.strings=c(""," ","NA"))
+test  <- read.csv('../Data/1.Raw/test.csv', stringsAsFactors = F, na.strings=c(""," ","NA"))
 
 full  <- bind_rows(train, test)                             # bind training & test data
 
 summary(full)                                               # check data
 ```
-
 Here we can see that the summary makes sense for some variables - Age is a continous variable ranging from an infant (0.17 years) up to a possible grandfather (80 years), with 263 missing values (NAs). For other variables, such as the passenger's sex, whether they survived and their port of embarkation it would make more sense for these variables - currently a mix of numeric and charecter variables - to be groups of individuals, which in R are called factors aka categorical variables.  Classifying these variables correctly as factors will mean that any functions, plots or models will behave themselves correctly and produce the expected results.
 
 ```{r}
 full$Survived <- factor(full$Survived, levels=c(1,0))
 levels(full$Survived) <- c("Survived", "Died")
-summary(full)                                              # re-check data
+str(full)                                              # re-check data
 ```
 
 
@@ -84,13 +76,13 @@ NA_Count <- data.frame(NA_Count)                          # convert to a data fr
 grid.table(NA_Count)                                      # produce the output table
 ```
 
-As expected, Age does have the highest number of missing values (263), with only Fare having one other missing value.
+As expected, Age does have the highest number of missing values (263), with only Fare having one other missing value.  
 
-## One way survival variable exploration 
+## Numeric Variable exploration
 
 Next we can begin to look at the variables in more detail.  First, let's explore age.
 
-```{r}
+```{r, message=FALSE, warning=FALSE}
 #hist(full$Age) - basic histogram
 
 ggplot (data=full[1:891,], aes(x=Age)) +
@@ -141,11 +133,13 @@ names(agebin_x_survived_NA)[names(agebin_x_survived_NA)=="Var1"] <- "Age"
 names(agebin_x_survived_NA)[names(agebin_x_survived_NA)=="Var2"] <- "Survived"
 
 #Next we create the two plots based on the two tables just created
-p1 <- ggplot(data = agebin_x_survived, aes(x = Age, y = Freq, fill = Survived)) + geom_bar(stat="identity") +
+p1 <- ggplot(data = agebin_x_survived, aes(x = Age, y = Freq, fill = Survived)) + 
+  geom_bar(stat="identity") +
   labs(title="Survival by Age Group") 
   #ADD COUNTS TO CHART or possibly %
 
-p2 <- ggplot(data = agebin_x_survived_NA, aes(x = Age, y = Freq, fill = Survived)) + geom_bar(stat="identity") +
+p2 <- ggplot(data = agebin_x_survived_NA, aes(x = Age, y = Freq, fill = Survived)) + 
+  geom_bar(stat="identity") +
   labs(title="Survival by Age Group - including NAs") 
   #ADD COUNTS TO CHART or possibly %
 
@@ -153,9 +147,69 @@ p2 <- ggplot(data = agebin_x_survived_NA, aes(x = Age, y = Freq, fill = Survived
 grid.arrange(p1, p2, ncol=2)
 ```
 
-The second chart helps to highlight some of the problems with missing (NA) values.  Without the NA values included, there is a large portion of our passengers missing from the analysis.  In addition, it appears that the proportion of those with missing age values who have surivived, is much lower than for some of the other age groups, so we perhaps need to look at this group in more detail or risk missing something important in the underlying structure of survivorship.
+The second chart helps to highlight some of the problems with missing (NA) values.  Without the NA values included, there is a large portion of our passengers missing from the analysis.  In addition, it appears that the proportion of those with missing age values who have surivived, is much lower than for some of the other age groups, so we perhaps need to look at this group in more detail or risk missing something important in the underlying structure of survivorship. 
 
-One option for handling the missing values would be to use an average passenger age across the known values and apply this average to the missing values.  However a more nuaned approach would be to explore the relationships between survival and the other variables at our disposal in the data set, going on to make a more informed estimation of the age value using imputatation.
+We have two numeric variables - age and fare - and we have seen that age is not normally distributed.  What about fare?  
+
+```{r}
+ggplot(data=full, aes(Fare)) + geom_histogram()
+```
+
+
+There is a definite right skew in the Fares, similar to age but much more skewed.  Before we proceed, it is a good idea to log transform Fare, then observe the resulting scatterplot of these two variables, to see if there is a relationship.  We might expect that as the person's age increases, so might their
+
+```{r}
+full$LogFare <- log(full$Fare)
+ggplot(full, aes(x=Age, y=logFare)) +
+  geom_point() +
+  geom_smooth(method=lm)
+```
+
+
+
+## Dealing with missing values
+
+One option for handling the missing values would be to use an average passenger age across the known values and apply this average to the missing values.  However a more nuanced approach would be to explore the relationships between survival and the other variables at our disposal in the data set, going on to make a more informed estimation of the age value using imputatation.  Earlier we created the missing map using the Amelia package, now we will use the same package to help us impute those missing values for age.  
+
+Before we do the modelling however there is some preperation needed. The [manual for Amelia](https://r.iq.harvard.edu/docs/amelia/amelia.pdf) notes:
+
+> When performing multiple imputation, the first step is to identify the variables to include in the imputation model. It is crucial to include at least as much information as will be used in the analysis model. That is, any variable that will be in the analysis model should also be in the imputation model.
+
+So firstly, we should also specify any nominal variables in the data set be specified to Amelia and identify any identification variables which are not to be included in the  imputation model with the argument idvars. These variables will not be used in the imputation model, but will be kept in the imputed datasets. For the idvars, we want to include not just the PassengerId, but also those variables which are unlikely to add anything meaningful to the imputation i.e. they are unique to that particular person, such as their ticket number. First we need to specify these variables as eiter nominal or idvariables,  Amelia will then threat all variables in the dataset as numeric.
+
+```{r}
+
+# change categorical variables into factors not integers
+full$Pclass <- as.factor(full$Pclass)
+full$PSex <- as.factor(full$Sex)
+full$SibSp <- as.factor(full$SibSp)
+full$Parch <- as.factor(full$Parch)
+full$Cabin <- as.factor(full$Cabin)
+full$Embarked <- as.factor(full$Embarked)
+full$Survived <- as.factor(full$Survived)
+
+#noms = c('Pclass', 'Sex', 'SibSp', 'Parch', 'Cabin', 'Embarked', 'Survived' )
+#idvars = c('PassengerId', 'Name', 'Ticket')
+
+
+
+selection <- select(full, PassengerId, Sex, Age, Parch)
+noms = c('Sex', 'Parch')
+idvars = c('PassengerId')
+```
+
+
+
+
+
+```{r}
+amelia_fit <- amelia(selection, m=5, idvars = "idvars", noms = "noms")
+#amelia_fit <- amelia(selection, m=5, idvars = "idvars", logs = "log", noms = "noms")
+```
+
+
+
+We also saw a single missing value for fare.
 
 ## Two way survival variable exploration 
 
@@ -233,213 +287,9 @@ GLM2 <- glm(formula = Survived ~ Sex * Age, family = binomial, data = full[1:891
 summary (GLM2)
 ```
 
-## Dealing with missing values
-
-First, let's create a title variable to help with modelling
-
-```{r}
-# Grab title from passenger names
-full$Title <- gsub('(.*, )|(\\..*)', '', full$Name)
-
-# Show title counts by sex
-table(full$Sex, full$Title)
-```
-
-```{r}
-# Titles with very low cell counts to be combined to "rare" level
-rare <- c('Dona', 'Lady', 'the Countess','Capt', 'Col', 'Don', 
-                'Dr', 'Major', 'Rev', 'Sir', 'Jonkheer')
-
-# Also reassign mlle, ms, and mme accordingly
-full$Title[full$Title == 'Mlle']        <- 'Miss' 
-full$Title[full$Title == 'Ms']          <- 'Miss'
-full$Title[full$Title == 'Mme']         <- 'Mrs' 
-full$Title[full$Title %in% rare]        <- 'Rare'
-
-# Show title counts by sex again
-table(full$Sex, full$Title)
-```
-
-```{r}
-# Finally, grab surname from passenger name
-full$Surname <- sapply(full$Name,  
-                      function(x) strsplit(x, split = '[,.]')[[1]][1])
-```
-
-```{r}
-# Create a family size variable including the passenger themselves
-full$Fsize <- full$SibSp + full$Parch + 1
-
-# Create a family variable 
-full$Family <- paste(full$Surname, full$Fsize, sep='_')
-
-# Discretize family size
-full$FsizeD[full$Fsize == 1] <- 'single'
-full$FsizeD[full$Fsize < 5 & full$Fsize > 1] <- 'small'
-full$FsizeD[full$Fsize > 4] <- 'large'
-
-```
 
 
 
-```{r}
-# Make variables factors into factors
-factor_vars <- c('PassengerId','Pclass','Sex','Embarked',
-                 'Title','Surname','Family','FsizeD')
+## Lessons Learnt
 
-full[factor_vars] <- lapply(full[factor_vars], function(x) as.factor(x))
-
-# Set a random seed
-set.seed(129)
-
-# Perform mice imputation, excluding certain less-than-useful variables:
-mice_mod <- mice(full[, !names(full) %in% c('PassengerId','Name','Ticket','Cabin','Family','Surname','Survived')], method='rf')
-
-# Save the complete output 
-mice_output <- complete(mice_mod)
-
-# Replace Age variable from the mice model.
-full$Age <- mice_output$Age
-
-```
-
-```{r}
-
-# Drop full name and Ticket - these are unique values and are represented better by other vars such as Family and Title - will help to reduce overfitting
-keep <- c(1:3, 5:8, 10:17)
-
-# Split the dataset for modelling
-train <- full[1:891, keep]
-test <- full[892:1309, keep]
-
-# Replace missing fare value with median for the passenger class 3 and those who embarked from Southampton
-full$Fare[1044] <- median(full[full$Pclass == '3' & full$Embarked == 'S', ]$Fare, na.rm = TRUE)
-
-# Set as data.tables for one hot encoding / spare matrix
-df <-data.table(train)
-df2 <-data.table(test)
-df2$Survived <- 0 # so NA values do not appear yet we can still proceed with one hot encoding, this will be dropped anyway
-
-#create discreet groups for Age
-head(df[, AgeDiscreet := as.factor(round(Age/10,0))])
-head(df2[, AgeDiscreet := as.factor(round(Age/10,0))])
-
-#Perfom one hot encoding to convert categorical in to dummy vars, removing our label (predicted) column
-sparse_matrix <- sparse.model.matrix(Survived~.-1, data=df)
-
-#Perfom one hot encoding to convert categorical in to dummy vars for our test data
-sparse_matrix_test <- sparse.model.matrix(Survived~.-1, data=df2)
-                                          
-#could try grid search with caret see https://www.kaggle.com/jimthompson/ensemble-model-stacked-model-example and https://stats.stackexchange.com/questions/171043/how-to-tune-hyperparameters-of-xgboost-trees
-
-#Run cross validated xgboost
-system.time({
-cv <- xgb.cv(data = sparse_matrix,
-               label = df$Survived,
-               max.depth = 7,
-               eta = 0.1,
-               nthread = 12, # seems to work quicker with fewer threads, but better fit with more threads?
-               nrounds = 500,
-               nfold = 5,
-               eval_metric = "error",
-               objective = "reg:logistic",
-               print_every_n = 50,
-               verbose = 1
-  )
-})
-# Get the evaluation log 
-elog <- as.data.frame(cv$evaluation_log)
-
-# Determine and print how many trees minimize training and test error
-elog %>% 
-   summarize(ntrees.train = which.min(elog$train_error_mean),   # find the index of min(train_rmse_mean)
-             ntrees.test  = which.min(elog$test_error_mean))   # find the index of min(test_rmse_mean)
-
-# Set the number of trees to use, as determined by xgb.cv 
-ntrees  = which.min(elog$test_error_mean)
-ntrees
-
-# Run xgb
-xgb <- xgboost(data = sparse_matrix,
-                      label = df$Survived,
-                      max.depth = 7,
-                      eta = 0.1,
-                      nrounds = ntrees,
-                      objective = "reg:logistic",
-                      verbose = 2)
-
-# Save the variables and print the top 10 most important factors
-importance <- xgb.importance(feature_names = sparse_matrix@Dimnames[[2]], model = xgb)
-xgb.plot.importance(importance[1:10,])
-#xgb.plot.tree(feature_names = sparse_matrix@Dimnames[[2]], model = xgb)
-
-# Make predictions on our original training data 
-train$pred <- predict(xgb, sparse_matrix)
-
-# Calculate error by convert the probability (as a decimal) to a binary outcome (1 or 0) with a 50% (0.5) cutoff point
-err <- mean(as.numeric(train$pred > 0.5) != df$Survived)
-print(paste("test-error=", err)) # calculate the amount of error
-train$predicted <- ifelse(train$pred > 0.5, 1, 0) # save the result as a binary outcome
-
-# Create the confusion matrix
-confusionMatrix(train$predicted, train$Survived, positive="1")
-# Sensitivity = true positive rate, Specificty = true negative rate, Kappa score 0.6-0.8 is good/substantial, 0.81+ is very good/excellent, <0.2 Poor/slight
-
-# Crete ROC Curve - we are loking for a curve towards the top right hand corner for a good accurate test, closer to the diagonal the worse
-xgb.pred <- prediction(train$pred, train$Survived)
-xgb.perf <- performance(xgb.pred, "tpr", "fpr")
-{plot(xgb.perf,
-     avg="threshold",
-     colorize=TRUE,
-     lwd=1,
-     main="ROC Curve w/ Thresholds",
-     print.cutoffs.at=seq(0, 1, by=0.05),
-     text.adj=c(-0.5, 0.5),
-     text.cex=0.5)
-  grid(col="lightgray")
-  axis(1, at=seq(0, 1, by=0.1))
-  axis(2, at=seq(0, 1, by=0.1))
-  abline(v=c(0.1, 0.3, 0.5, 0.7, 0.9), col="lightgray", lty="dotted")
-  abline(h=c(0.1, 0.3, 0.5, 0.7, 0.9), col="lightgray", lty="dotted")
-  lines(x=c(0, 1), y=c(0, 1), col="black", lty="dotted")}
-
-# Predict the data using the test data and convert to a binary
-test$pred <- predict(xgb, sparse_matrix_test)
-test$pred <- ifelse(test$pred > 0.5, 1, 0)
-
-# Save the solution to a dataframe with two columns: PassengerId and Survived (prediction)
-solution <- data.frame(PassengerID = test$PassengerId, Survived = test$pred)
-
-# write solution
-write.csv(solution, file = 'xgbSolution.csv', row.names = F)
-
-# Creates an interactive Shiny app to explore the interactions, using the XGBfi package
-featureList <- sparse_matrix@Dimnames[[2]]  
-featureVector <- c() 
-for (i in 1:length(featureList)) { 
-  featureVector[i] <- paste(i-1, featureList[i], "q", sep="\t") 
-}
-xgb.fi(model = xgb, features = featureVector)
-
-
-# We can the explore the second and third order interactions outside of R using xgbi - code below creates the two files that are needed
-# see http://projects.rajivshah.com/blog/2016/08/01/xgbfi/ 
-
-featureList <- sparse_matrix@Dimnames[[2]] 
-featureVector <- c() 
-for (i in 1:length(featureList)) { 
-  featureVector[i] <- paste(i-1, featureList[i], "q", sep="\t") 
-}
-write.table(featureVector, "fmap.txt", row.names=FALSE, quote = FALSE, col.names = FALSE)
-xgb.dump(model = xgb, fname = 'xgb.dump', with_stats = TRUE)
-
-
-featureList <- sparse_matrix@Dimnames[[2]]  # this is the correct variable names, but xgb.dump does not appear to like them - most likely the name variable
-featureVector <- c() 
-for (i in 1:length(featureList)) { 
-  featureVector[i] <- paste(i-1, featureList[i], "q", sep="-") 
-}
-write.table(featureVector, "fmap.txt", row.names=FALSE, quote = FALSE, col.names = FALSE)
-
-```
-
+* Remember to visually inspect the data table - the missing map initially suggested that cabin was not missing at all, until inspecting the data table when it became clear that many values were missing.  This was a real Homer Simpson doh! moment since data often comes with spaces, blank data filled as text and so on, which is usually one of the first things I'd check, yet I hadn't at first.
