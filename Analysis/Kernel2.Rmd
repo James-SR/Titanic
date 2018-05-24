@@ -34,7 +34,8 @@ library(Matrix)                                           # for one hot encoding
 library(xgboost)                                          # for xgboost algorithm
 library(caret)                                            # for model evaulation and tuning
 library(ROCR)                                             # for model evaulation with ROC Curves
-library(Hmisc)                                            # for handling missing data
+library(BaylorEdPsych)                                    # for Little's MCAR test
+library(mvnmle)                                           # also needed for Little's MCAR test
 ```
 
 First lets combine the test and train datasets then get a feel for what data there is to work with.
@@ -53,15 +54,6 @@ Here we can see that the summary makes sense for some variables - Age is a conti
 # Define the survived variable
 full$Survived <- factor(full$Survived, levels=c(1,0))
 levels(full$Survived) <- c("Survived", "Died")
-
-# Change variables into factors not integers
-full$Pclass <- as.factor(full$Pclass)
-full$PSex <- as.factor(full$Sex)
-full$SibSp <- as.factor(full$SibSp)
-full$Parch <- as.factor(full$Parch)
-full$Cabin <- as.factor(full$Cabin)
-full$Embarked <- as.factor(full$Embarked)
-full$Survived <- as.factor(full$Survived)
 str(full)                                              # re-check data
 ```
 
@@ -86,7 +78,7 @@ NA_Count <- data.frame(NA_Count)                          # convert to a data fr
 grid.table(NA_Count)                                      # produce the output table
 ```
 
-As expected, Age does have the highest number of missing values (263), with only Fare having one other missing value.  
+As expected, Age does have the highest number of missing values (263), with only Fare having one other missing value.  There are also a very large number of missing cabin numbers.
 
 ## Numeric Variable exploration
 
@@ -159,19 +151,20 @@ grid.arrange(p1, p2, ncol=2)
 
 The second chart helps to highlight some of the problems with missing (NA) values.  Without the NA values included, there is a large portion of our passengers missing from the analysis.  In addition, it appears that the proportion of those with missing age values who have surivived, is much lower than for some of the other age groups, so we perhaps need to look at this group in more detail or risk missing something important in the underlying structure of survivorship. 
 
-Before proceeding, it is worht looking at the other numeric variable, fare.  We have seen that age is not normally distributed.  What about fare?  
+Before proceeding, it is worth looking at the other numeric variable, fare.  We have seen that age is not normally distributed.  What about fare?  
 
 ```{r}
 ggplot(data=full, aes(Fare)) + 
   geom_histogram() +
-  labs(title="Age by Log Transformed Fare")
+  labs(title="Fare Histogram")
 ```
 
 There is a definite right skew in the Fares, similar to age but much more skewed.  If we remove this skew by log transforming Fare, we can then observe the resulting scatterplot of these two variables, to see if there is a relationship.  We might expect that as the person's age increases, so might the fare paid.  We can calculate the strength and direction of this relationship using Spearman's Rho, which is more suitable for this data than Pearson's measure as we have some outliers for fare, even after transformation, which may determintetally influence the calculation of the Pearson measure.
 
 ```{r}
-# Produce the scatterplot
-full$LogFare <- log(full$Fare)
+# Log Transform age and produce the scatterplot
+full$logFare <- log(full$Fare)
+
 ggplot(full, aes(x=Age, y=logFare)) +
   geom_point() +
   geom_smooth(method=lm) +
@@ -186,40 +179,87 @@ The p-value suggests there is a statistically significant relationship (correlat
 
 ## Dealing with missing values
 
-One option for handling the missing values would be to use an average passenger age across the known values and apply this average to the missing values.  However a more nuanced approach would be to explore the relationships between survival and the other variables at our disposal in the data set, going on to make a more informed estimation of the age value using imputatation.  Earlier we created the missing map using the Amelia package, now we will use the same package to help us impute those missing values for age.  
+One option for handling the missing values would be to use an average passenger age across the known values and apply this average to the missing values.  However a more nuanced approach would be to explore the relationships between survival and the other variables at our disposal in the data set, going on to make a more informed estimation of the age value using imputatation.  Earlier we created the missing map using the Amelia package, now we will use the same package to help us impute those missing values for age.
 
-Before we do the modelling however there is some preperation needed. The [manual for Amelia](https://r.iq.harvard.edu/docs/amelia/amelia.pdf) notes:
+There are three types of missing data:
 
-> When performing multiple imputation, the first step is to identify the variables to include in the imputation model. It is crucial to include at least as much information as will be used in the analysis model. That is, any variable that will be in the analysis model should also be in the imputation model.
+* Missing completely at random (MCAR) - there is no difference between the charecteristics of those missing and those observed.  For instance this might happen due to data input errors, made accidentally    
+* Missing at Random (MAR) - there is a difference between those missing and those observed, but this can be explained by other variables in the data. For instance if we had missing fare data this might be because those males might be less likely to tell you the fare paid, if collecting the data using a survey.  There is no relationship between the propensity of missing values and the missing data, males may just be less likely to provide this information
+* Missing Not at Random (MNAR) - there is a difference between those missing and those observed, AND this CANNOT be explained by other variables in the data, this would mean missing data is related to things we have not observed.  For instance if we had missing fare data and this was related to the persons social class. There is a relationship between the value of the missing data and why it is missing
 
-So firstly, we should also specify any nominal variables in the data set be specified to Amelia and identify any identification variables which are not to be included in the  imputation model with the argument idvars. These variables will not be used in the imputation model, but will be kept in the imputed datasets. For the idvars, we want to include not just the PassengerId, but also those variables which are unlikely to add anything meaningful to the imputation i.e. they are unique to that particular person, such as their ticket number. First we need to specify these variables as eiter nominal or idvariables,  Amelia will then threat all variables in the dataset as numeric.
+If our data has both MCAR and MAR missing data we can use missing data techniques.  If the data is MNAR than there a consistent relationship with the missing data which the missing data processes, such as imputation, cannot account for. This can be a problem. Before we begin, we can test whether the variables are MCAR using Little's MCAR test:
+
+* **Null Hypothesis $H_{0}$**: The missing data is Missing Completely At Random (MCAR)
+* **Alternate Hypothesis $H_{A}$**: The missing data is NOT Missing Completely At Random (MCAR)
+
+```{r, message=FALSE}
+# Select those variables which are litkely to be used by the modelling, for instance we can exlcude things like name and cabin
+t1 <- full[c(6:8,10,11,12:13)]
+
+# Run Little's test for MCAR and save it as a new object - some of the output isn't neccessary
+t1MCAR <- LittleMCAR(t1)
+
+# Read out just the variables of interest
+t1MCAR$amount.missing
+t1MCAR$chi.square
+t1MCAR$df
+t1MCAR$p.value
+```
+
+In this instance we can see the p-value is high, so we reject the null hypothesis and accept the alternative hypothesis.  
+
+- Mention cabin
+
+So let's run Little's test without cabin.
+
+```{r, message=FALSE}
+# Select those variables which are litkely to be used by the modelling, for instance we can exlcude things like name and cabin
+t1 <- full[c(6:8,10,12:13)]
+
+# Run Little's test for MCAR and save it as a new object - some of the output isn't neccessary
+t1MCAR <- LittleMCAR(t1)
+
+# Read out just the variable of interest
+t1MCAR$p.value
+```
+
+So we have a slightly better p-value than including cabin.  However the p-value is still very small indicating there is a very low probability the relationship is due to chance, so we should still reject the null hypothesis that the data is MCAR.  The question then becomes can we ignore the missing data relationship (MAR) or that the missing data is a non-ignorable problem (MNAR).  There isn't a statistical test for MAR, however we can observe the relationship between our variables to see if there is any substative relationship which may suggest it is ignorable or explained.
+
+- Relationships
 
 ```{r}
+#Change variables into factors not integers
+full$Pclass <- as.factor(full$Pclass)
+full$PSex <- as.factor(full$Sex)
+full$SibSp <- as.factor(full$SibSp)
+full$Parch <- as.factor(full$Parch)
+full$Cabin <- as.factor(full$Cabin)
+full$Embarked <- as.factor(full$Embarked)
+full$Survived <- as.factor(full$Survived)
 
 
-
-#noms = c('Pclass', 'Sex', 'SibSp', 'Parch', 'Cabin', 'Embarked', 'Survived' )
-#idvars = c('PassengerId', 'Name', 'Ticket')
-
-
-
-selection <- select(full, PassengerId, Sex, Age, Parch)
-noms = c('Sex', 'Parch')
-idvars = c('PassengerId')
 ```
 
 
 
-
-
 ```{r}
-amelia_fit <- amelia(selection, m=5, idvars = "idvars", noms = "noms")
-#amelia_fit <- amelia(selection, m=5, idvars = "idvars", logs = "log", noms = "noms")
+titanic.amelia <- amelia(subset(full,
+                                select=c('Survived','Pclass','Sex','Age')),
+                                m=10, noms=c('Survived','Pclass','Sex'),
+                                emburn=c(500,500),
+                                p2s = F)
 ```
-
 
 
 We also saw a single missing value for fare.
+
+### Cabin 
+
+Image / deck plan
+Had hoped to improve by looking through old records, but doesn't seem possible currently.  Looks like it is not just me [with this problem](https://www.kaggle.com/c/titanic/discussion/4693).
+Look at correlation between cabin and Pclass - numerically and location (deck plan) wise.
+
+
 
 ## Two way survival variable exploration 
 
@@ -300,6 +340,6 @@ summary (GLM2)
 
 
 
-## Lessons Learnt
+# Lessons Learnt
 
 * Remember to visually inspect the data table - the missing map initially suggested that cabin was not missing at all, until inspecting the data table when it became clear that many values were missing.  This was a real Homer Simpson doh! moment since data often comes with spaces, blank data filled as text and so on, which is usually one of the first things I'd check, yet I hadn't at first.
